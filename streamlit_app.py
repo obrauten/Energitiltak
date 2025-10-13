@@ -4,7 +4,7 @@ import streamlit as st
 # Konstanter og hjelpefunksjoner
 # ===============================
 RHO = 1.2             # kg/m³
-CP_J = 1006.0         # J/(kg·K)  (brukes for W/K)
+CP_J = 1006.0         # J/(kg·K)
 HDD = 4800            # graddager
 Kh = HDD * 24         # K·h
 HOURS_YEAR = 8760
@@ -23,12 +23,10 @@ def nok_og_co2(kWh: float, pris_kr_per_kWh: float, utslipp_g_per_kWh: float):
 # Tiltaksberegninger
 # ===============================
 def etterisolering(A_m2: float, U_old: float, U_new: float) -> float:
-    """kWh/år spart ved forbedret U-verdi (vegg/tak/vindu)."""
     dU = max(U_old - U_new, 0.0)
     return dU * A_m2 * Kh / 1000.0
 
 def besparelse_varmegjenvinner(qv_m3_h: float, eta_old: float, eta_new: float, driftstimer: float) -> float:
-    """kWh/år spart ved bedre varmegjenvinner (skaleres med faktisk driftstid)."""
     d_eta = max(eta_new - eta_old, 0.0)
     qv_m3_s = qv_m3_h / 3600.0
     H_W_per_K = RHO * CP_J * qv_m3_s
@@ -37,34 +35,32 @@ def besparelse_varmegjenvinner(qv_m3_h: float, eta_old: float, eta_new: float, d
     return max(E_kWh, 0.0)
 
 def besparelse_sfp(qv_m3_h: float, SFP_old: float, SFP_new: float, driftstimer: float) -> float:
-    """kWh/år spart el til vifter ved lavere SFP."""
-    dSFP = max(SFP_old - SFP_new, 0.0)               # kW/(m³/s)
+    dSFP = max(SFP_old - SFP_new, 0.0)
     qv_m3_s = qv_m3_h / 3600.0
     return max(dSFP * qv_m3_s * driftstimer, 0.0)
 
 def besparelse_varmepumpe(Q_netto_kWh_year: float, eta_old: float, COP_new: float) -> float:
-    """kWh/år spart levert energi ved overgang fra kjel/elkjel til varmepumpe."""
     return max(Q_netto_kWh_year * (1.0/eta_old - 1.0/max(COP_new, 0.0001)), 0.0)
 
-# Enkle driftstiltak for næringsbygg
 def besparelse_tempreduksjon(Q_space_kWh_year: float, delta_T_C: float) -> float:
-    """Tommelfinger: ~5 % lavere varmebehov per °C reduksjon i settpunkt."""
     return max(Q_space_kWh_year * 0.05 * max(delta_T_C, 0.0), 0.0)
 
 def besparelse_nattsenking(Q_space_kWh_year: float, setback_C: float, timer_per_dogn: float) -> float:
-    """~5 %/°C skalert med andel av døgnet i senket modus."""
     duty = max(min(timer_per_dogn, 24.0), 0.0) / 24.0
     return max(Q_space_kWh_year * 0.05 * max(setback_C, 0.0) * duty, 0.0)
 
-# Belysning – hjelpetabell (næringsbygg, uten parentes i navn)
+# ===============================
+# Belysning – hjelpetabell
+# (bruke REN sum av lamper uten ballastekstra; f.eks. T8 2×58 W = 116 W)
+# ===============================
 LUMINAIRE_MAP = [
-    {"navn": "T8 2×58 W armatur m/konv. forkobling", "gammel_W": 2*58 + 10},
-    {"navn": "T8 4×18 W raster",                     "gammel_W": 4*18 + 8},
-    {"navn": "T5 2×49 W kontor/raster",              "gammel_W": 2*49 + 6},
-    {"navn": "Downlight halogen 50 W",               "gammel_W": 50},
-    {"navn": "Metallhalogen 150 W lager/sal",        "gammel_W": 165},
-    {"navn": "Utearmatur HQL 125 W",                 "gammel_W": 140},
-    {"navn": "Egendefinert",                         "gammel_W": None},
+    {"navn": "T8 2×58 W",           "gammel_W": 2*58},   # 116 W
+    {"navn": "T8 4×18 W",           "gammel_W": 4*18},   # 72 W
+    {"navn": "T5 2×49 W",           "gammel_W": 2*49},   # 98 W
+    {"navn": "Downlight halogen 50 W", "gammel_W": 50},
+    {"navn": "Metallhalogen 150 W", "gammel_W": 150},
+    {"navn": "HQL 125 W",           "gammel_W": 125},
+    {"navn": "Egendefinert",        "gammel_W": None},
 ]
 
 def besparelse_belysning(ant_armatur: int, W_gammel: float, W_led: float, timer_per_aar: float) -> float:
@@ -166,52 +162,64 @@ with tabs[5]:
 # === Belysning (LED) ===
 with tabs[6]:
     st.subheader("Belysning (LED)")
+
+    # 1) Velg armaturtype
     navn_liste = [d["navn"] for d in LUMINAIRE_MAP]
     valg = st.selectbox("Velg eksisterende armaturtype", navn_liste, index=0, key="lights_type")
     data = next(d for d in LUMINAIRE_MAP if d["navn"] == valg)
 
+    # 2) Når valg endres, oppdater automatisk W_old og W_led (LED = 60 % av gammel)
+    if "lights_prev_type" not in st.session_state:
+        st.session_state["lights_prev_type"] = valg
+
+    if valg != st.session_state["lights_prev_type"]:
+        if data["gammel_W"] is None:
+            st.session_state["lights_W_old"] = 200
+            st.session_state["lights_W_led"] = int(round(200 * 0.60))
+        else:
+            st.session_state["lights_W_old"] = int(data["gammel_W"])
+            st.session_state["lights_W_led"] = int(round(st.session_state["lights_W_old"] * 0.60))
+        st.session_state["lights_prev_type"] = valg
+
+    # 3) Antall og timer
     colA, colB, _ = st.columns(3)
     with colA:
         ant = st.number_input("Antall armaturer (stk)", min_value=0, max_value=1_000_000, value=200, step=10, key="lights_count")
     with colB:
         timer = st.number_input("Driftstimer/år", min_value=100, max_value=HOURS_YEAR, value=3000, step=100, key="lights_hours")
 
-    # Automatikk: W_old fra valg, W_led = 60 % av W_old (kan overstyres)
+    # 4) Effektfelt – auto-populeres, men kan overstyres
     if data["gammel_W"] is None:
-        col1, col2 = st.columns(2)
-        with col1:
-            W_old = st.number_input("Effekt pr gammel armatur (W)", min_value=1, max_value=2000, value=200, step=5, key="lights_W_old")
-        with col2:
-            default_led = int(round(W_old * 0.60))
-            W_led = st.number_input("Effekt pr LED-armatur (W)", min_value=1, max_value=2000, value=default_led, step=5, key="lights_W_led")
-    else:
-        W_old_auto = int(data["gammel_W"])
-        # lagre i session for å kunne vise som default, men brukeren kan overstyre
-        st.session_state.setdefault("lights_W_old", W_old_auto)
-        st.session_state["lights_W_old"] = W_old_auto
-        default_led = int(round(W_old_auto * 0.60))
-        st.session_state.setdefault("lights_W_led", default_led)
-
+        # Egendefinert: la bruker skrive begge
+        default_old = st.session_state.get("lights_W_old", 200)
+        default_led = st.session_state.get("lights_W_led", int(round(default_old * 0.60)))
         col1, col2 = st.columns(2)
         with col1:
             W_old = st.number_input("Effekt pr gammel armatur (W)", min_value=1, max_value=2000,
-                                    value=st.session_state["lights_W_old"], step=1, key="lights_W_old_input")
+                                    value=default_old, step=1, key="lights_W_old")
         with col2:
-            # dersom W_old endres manuelt, oppdatér LED-forslag til 60 % av ny
-            if "lights_W_old_input" in st.session_state:
-                default_led = int(round(st.session_state["lights_W_old_input"] * 0.60))
             W_led = st.number_input("Effekt pr LED-armatur (W)", min_value=1, max_value=2000,
-                                    value=default_led, step=1, key="lights_W_led_input")
+                                    value=default_led, step=1, key="lights_W_led")
+    else:
+        # Forhåndssett fra valg; vis felt som kan overstyres
+        preset_old = st.session_state.get("lights_W_old", int(data["gammel_W"]))
+        preset_led = st.session_state.get("lights_W_led", int(round(preset_old * 0.60)))
+        col1, col2 = st.columns(2)
+        with col1:
+            W_old = st.number_input("Effekt pr gammel armatur (W)", min_value=1, max_value=2000,
+                                    value=preset_old, step=1, key="lights_W_old")
+        with col2:
+            # Oppdater LED-forslag hvis W_old endres manuelt i denne visningen
+            if st.session_state.get("lights_W_old", preset_old) != preset_old:
+                preset_led = int(round(st.session_state["lights_W_old"] * 0.60))
+                st.session_state["lights_W_led"] = preset_led
+            W_led = st.number_input("Effekt pr LED-armatur (W)", min_value=1, max_value=2000,
+                                    value=st.session_state.get("lights_W_led", preset_led), step=1, key="lights_W_led")
 
+    # 5) Beregn
     if st.button("Beregn", key="btn_lights"):
-        # plukk riktige keys basert på egendefinert/auto
-        if data["gammel_W"] is None:
-            W_old_val = st.session_state.get("lights_W_old", 200)
-            W_led_val = st.session_state.get("lights_W_led", int(round(W_old_val*0.60)))
-        else:
-            W_old_val = st.session_state.get("lights_W_old_input", default_led)
-            W_led_val = st.session_state.get("lights_W_led_input", int(round(W_old_val*0.60)))
-
+        W_old_val = st.session_state["lights_W_old"]
+        W_led_val = st.session_state["lights_W_led"]
         kWh = besparelse_belysning(ant, W_old_val, W_led_val, timer)
         kr, kg = nok_og_co2(kWh, pris, utslipp_g)
         st.success(f"Energi spart: **{fmt_int(kWh)} kWh/år**")
