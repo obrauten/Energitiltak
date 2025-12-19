@@ -21,15 +21,18 @@ def nok_og_co2(kWh: float, pris_kr_per_kWh: float, utslipp_g_per_kWh: float):
     
 from datetime import time
 
-def annual_hours_from_schedule(t_start: time, t_end: time, days_per_week: int, weeks_per_year: float = 52.0) -> float:
-    """Timer/år fra daglig tidsrom + antall dager/uke. Håndterer også over midnatt."""
+def daily_hours(t_start: time, t_end: time) -> float:
+    """Timer per dag for et tidsrom. Håndterer også over midnatt."""
     start_h = t_start.hour + t_start.minute / 60
     end_h   = t_end.hour + t_end.minute / 60
-    daily = end_h - start_h
-    if daily < 0:   # f.eks. 22:00–06:00
-        daily += 24
-    daily = max(min(daily, 24.0), 0.0)
-    return max(min(daily * days_per_week * weeks_per_year, 8760.0), 0.0)
+    h = end_h - start_h
+    if h < 0:
+        h += 24
+    return max(min(h, 24.0), 0.0)
+
+def annual_hours_from_schedule(t_start: time, t_end: time, days_per_week: int, weeks_per_year: float = 52.0) -> float:
+    h_day = daily_hours(t_start, t_end)
+    return max(min(h_day * days_per_week * weeks_per_year, 8760.0), 0.0)
 
 # ===============================
 # Tiltaksberegninger
@@ -95,54 +98,51 @@ from datetime import time
 
 with st.sidebar:
     st.header("Økonomi og CO₂")
-    pris = st.number_input(
-        "Strøm-/energipris (kr/kWh)",
-        min_value=0.0, max_value=20.0, value=1.25, step=0.05
-    )
-    utslipp_g = st.number_input(
-        "Utslippsfaktor (g CO₂/kWh)",
-        min_value=0.0, max_value=2000.0, value=20.0, step=1.0
-    )
+    pris = st.number_input("Strøm-/energipris (kr/kWh)", min_value=0.0, max_value=20.0, value=1.25, step=0.05, key="econ_price")
+    utslipp_g = st.number_input("Utslippsfaktor (g CO₂/kWh)", min_value=0.0, max_value=2000.0, value=20.0, step=1.0, key="econ_emis")
 
     st.divider()
-    st.header("Driftstid")
+    st.header("Driftstid (hjelpekalkulator)")
 
-    mode = st.radio(
-        "Velg input",
-        ["Tidsrom og dager", "Driftstimer/år (manuelt)"],
-        index=0
-    )
+    mode = st.radio("Velg input", ["Tidsrom og dager", "Driftstimer/år (manuelt)"], index=0, key="op_mode")
 
     if mode == "Tidsrom og dager":
-        t_start = st.time_input("Fra", value=time(7, 0))
-        t_end   = st.time_input("Til", value=time(17, 0))
+        t_start = st.time_input("Fra", value=time(7, 0), key="op_start")
+        t_end   = st.time_input("Til", value=time(17, 0), key="op_end")
 
-        dagvalg = st.selectbox(
-            "Dager",
-            ["Alle dager", "Man–fre", "Egendefinert"],
-            index=1
-        )
-
+        dagvalg = st.selectbox("Dager", ["Alle dager", "Man–fre", "Egendefinert"], index=1, key="op_days")
         if dagvalg == "Alle dager":
             days_per_week = 7
         elif dagvalg == "Man–fre":
             days_per_week = 5
         else:
-            days_per_week = st.slider("Antall dager per uke", 1, 7, 5)
+            days_per_week = st.slider("Antall dager per uke", 1, 7, 5, key="op_days_custom")
 
-        weeks_per_year = st.slider("Uker i drift per år", 1, 52, 52)
+        weeks_per_year = st.slider("Uker i drift per år", 1, 52, 52, key="op_weeks")
 
-        driftstimer = annual_hours_from_schedule(
-            t_start, t_end, days_per_week, weeks_per_year
-        )
-
-        st.caption(f"Beregnet driftstimer/år: **{int(round(driftstimer))} h**")
+        h_per_day = daily_hours(t_start, t_end)
+        driftstimer = annual_hours_from_schedule(t_start, t_end, days_per_week, weeks_per_year)
 
     else:
-        driftstimer = st.number_input(
-            "Driftstimer/år",
-            min_value=0, max_value=8760, value=3000, step=100
-        )
+        driftstimer = st.number_input("Driftstimer/år", min_value=0, max_value=8760, value=3000, step=100, key="op_manual")
+        # grov “forklaring” pr dag hvis du vil vise det:
+        h_per_day = None
+        days_per_week = None
+        weeks_per_year = None
+
+    # Utenfor driftstid (årsbasis)
+    utenfor = max(8760 - float(driftstimer), 0.0)
+    andel_drift = (float(driftstimer) / 8760.0) if 8760 else 0.0
+    andel_utenfor = 1.0 - andel_drift
+
+    st.caption(f"**Driftstimer/år:** {int(round(driftstimer))} h")
+    st.caption(f"**Utenfor driftstid/år:** {int(round(utenfor))} h")
+    st.caption(f"**Andel drift:** {andel_drift*100:.1f} %  |  **Utenfor:** {andel_utenfor*100:.1f} %")
+
+    # Ekstra nyttig “utenfor drift” på døgnet når du bruker tidsrom-modus
+    if mode == "Tidsrom og dager":
+        st.caption(f"**I drift per dag:** {h_per_day:.1f} h  |  **Utenfor per dag:** {24 - h_per_day:.1f} h")
+
 
 # === Etterisolering ===
 with tabs[0]:
