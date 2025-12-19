@@ -39,7 +39,7 @@ def annual_hours_from_schedule(t_start: time, t_end: time, days_per_week: int, w
     h_day = daily_hours(t_start, t_end)
     return max(min(h_day * days_per_week * weeks_per_year, 8760.0), 0.0)
 
-def areal_til_kwp(areal_m2: float, utnyttelse: float = 0.80, kwp_per_m2: float = 0.18) -> float:
+def areal_til_kwp(areal_m2: float, utnyttelse: float = 0.80, kwp_per_m2: float = 0.20) -> float:
     return max(float(areal_m2) * float(utnyttelse) * float(kwp_per_m2), 0.0)
 
 
