@@ -342,6 +342,18 @@ with tabs[7]:
         [700, 750, 800, 850, 900, 950],
         index=1
     )
+    st.markdown("""
+**Veiledende nivåer for årsproduksjon (kWh/kWp):**
+
+| kWh/kWp | Typisk situasjon |
+|--------:|-----------------|
+| 700 | Nord-Norge / ugunstige forhold |
+| 750 | Øst/vest-tak, lav vinkel (~10°), evt. noe skygge |
+| 800 | Typiske forhold i Midt-Norge |
+| 850 | Gode forhold, lite skygge |
+| 900 | Sør-Norge eller svært gode solforhold |
+| 950 | Optimale forhold (sørvendt, god vinkel 25–35°) |
+""")
 
     kWp = areal_til_kwp(areal, utnyttelse)
 
