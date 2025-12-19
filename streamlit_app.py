@@ -356,6 +356,6 @@ with tabs[7]:
 
         st.caption(
             f"Tommelfinger: {kWp/areal:.2f} kWp/m² "
-            f"(utnyttelse {utnyttelse*100:.0f} %, {0.18} kWp/m² moduler)"
+            f"(utnyttelse {utnyttelse*100:.0f} %, {0.20} kWp/m² moduler)"
         )
 
