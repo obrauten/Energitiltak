@@ -28,10 +28,13 @@ def nok_og_co2(kWh: float, pris_kr_per_kWh: float, utslipp_g_per_kWh: float):
 
 def payback_years(invest_kr: float, saving_kr_per_year: float):
     """Enkel tilbakebetalingstid. Returnerer None hvis saving <= 0."""
-    if saving_kr_per_year <= 0:
+    if float(saving_kr_per_year) <= 0:
         return None
     return float(invest_kr) / float(saving_kr_per_year)
 
+# ===============================
+# Oversikt state + helpers
+# ===============================
 def init_overview_state():
     if "tiltak_liste" not in st.session_state:
         st.session_state["tiltak_liste"] = []
@@ -46,27 +49,58 @@ def add_to_overview(navn: str, kwh: float, kr: float, co2_kg: float, invest: flo
         "Tilbakebetaling (år)": payback_years(float(invest), float(kr))
     })
 
-def show_add_block(navn: str, kwh: float, kr: float, co2_kg: float, invest_key: str, add_key: str):
-    """Vis investeringsfelt + payback + knapp for å legge til i oversikt."""
+# ===============================
+# Resultat-lagring (løser "hopper vekk")
+# ===============================
+def set_result(key: str, navn: str, kwh: float, kr: float, co2_kg: float, extra: dict | None = None):
+    st.session_state[key] = {
+        "navn": navn,
+        "kwh": float(kwh),
+        "kr": float(kr),
+        "co2": float(co2_kg),
+        "extra": extra or {}
+    }
+
+def get_result(key: str):
+    return st.session_state.get(key, None)
+
+def clear_result(key: str):
+    if key in st.session_state:
+        del st.session_state[key]
+
+def show_result_block(res_key: str):
+    """Standard resultatvisning for tiltak."""
+    res = get_result(res_key)
+    if not res:
+        return
+    st.success(f"Energi spart: **{fmt_int(res['kwh'])} kWh/år**")
+    st.info(f"Kostnadsbesparelse: **{fmt_int(res['kr'])} kr/år**  |  CO₂-reduksjon: **{fmt_int(res['co2'])} kg/år**")
+
+def show_add_block_from_state(res_key: str, invest_key: str, add_key: str):
+    """Vis investeringsfelt + payback + knapp for å legge til i oversikt (overlever reruns)."""
+    res = get_result(res_key)
+    if not res:
+        return
+
     st.divider()
     st.subheader("Lønnsomhet")
 
     invest = st.number_input(
         "Investeringskostnad (kr)",
         min_value=0.0,
-        value=0.0,
+        value=float(st.session_state.get(invest_key, 0.0)),
         step=10_000.0,
         key=invest_key
     )
 
-    pb = payback_years(invest, kr)
+    pb = payback_years(invest, res["kr"])
     if pb is None:
         st.caption("Tilbakebetaling (enkel): –")
     else:
         st.caption(f"Tilbakebetaling (enkel): **{pb:.1f} år**")
 
     if st.button("Legg til i oversikt", key=add_key):
-        add_to_overview(navn, kwh, kr, co2_kg, invest)
+        add_to_overview(res["navn"], res["kwh"], res["kr"], res["co2"], invest)
         st.success("Lagt til i oversikt.")
 
 # ===============================
@@ -130,13 +164,13 @@ def besparelse_nattsenking(Q_space_kWh_year: float, setback_C: float, timer_per_
 # Belysning – hjelpetabell
 # ===============================
 LUMINAIRE_MAP = [
-    {"navn": "T8 2×58 W",             "gammel_W": 2*58,  "led_factor": 0.40},
-    {"navn": "T8 4×18 W",             "gammel_W": 4*18,  "led_factor": 0.45},
-    {"navn": "T5 2×49 W",             "gammel_W": 2*49,  "led_factor": 0.50},
-    {"navn": "Downlight halogen 50 W","gammel_W": 50,    "led_factor": 0.20},
-    {"navn": "Metallhalogen 150 W",   "gammel_W": 150,   "led_factor": 0.40},
-    {"navn": "HQL 125 W",             "gammel_W": 125,   "led_factor": 0.45},
-    {"navn": "Egendefinert",          "gammel_W": None,  "led_factor": 0.40},
+    {"navn": "T8 2×58 W",              "gammel_W": 2*58,  "led_factor": 0.40},
+    {"navn": "T8 4×18 W",              "gammel_W": 4*18,  "led_factor": 0.45},
+    {"navn": "T5 2×49 W",              "gammel_W": 2*49,  "led_factor": 0.50},
+    {"navn": "Downlight halogen 50 W", "gammel_W": 50,    "led_factor": 0.20},
+    {"navn": "Metallhalogen 150 W",    "gammel_W": 150,   "led_factor": 0.40},
+    {"navn": "HQL 125 W",              "gammel_W": 125,   "led_factor": 0.45},
+    {"navn": "Egendefinert",           "gammel_W": None,  "led_factor": 0.40},
 ]
 
 def besparelse_belysning(ant_armatur: int, W_gammel: float, W_led: float, timer_per_aar: float) -> float:
@@ -206,9 +240,15 @@ with tabs[0]:
     if st.button("Beregn", key="btn_iso"):
         kWh = etterisolering(A, U_old, U_new)
         kr, kg = nok_og_co2(kWh, pris, utslipp_g)
-        st.success(f"Energi spart: **{fmt_int(kWh)} kWh/år**")
-        st.info(f"Kostnadsbesparelse: **{fmt_int(kr)} kr/år**  |  CO₂-reduksjon: **{fmt_int(kg)} kg/år**")
-        show_add_block("Etterisolering", kWh, kr, kg, invest_key="inv_iso", add_key="add_iso")
+        set_result("res_iso", "Etterisolering", kWh, kr, kg)
+
+    show_result_block("res_iso")
+    show_add_block_from_state("res_iso", invest_key="inv_iso", add_key="add_iso")
+
+    if get_result("res_iso"):
+        if st.button("Nullstill beregning", key="clear_iso"):
+            clear_result("res_iso")
+            st.rerun()
 
 # --- Varmegjenvinner ---
 with tabs[1]:
@@ -221,9 +261,15 @@ with tabs[1]:
     if st.button("Beregn", key="btn_hrv"):
         kWh = besparelse_varmegjenvinner(qv, eta_old, eta_new, driftstimer)
         kr, kg = nok_og_co2(kWh, pris, utslipp_g)
-        st.success(f"Energi spart: **{fmt_int(kWh)} kWh/år**")
-        st.info(f"Kostnadsbesparelse: **{fmt_int(kr)} kr/år**  |  CO₂-reduksjon: **{fmt_int(kg)} kg/år**")
-        show_add_block("Varmegjenvinner", kWh, kr, kg, invest_key="inv_hrv", add_key="add_hrv")
+        set_result("res_hrv", "Varmegjenvinner", kWh, kr, kg)
+
+    show_result_block("res_hrv")
+    show_add_block_from_state("res_hrv", invest_key="inv_hrv", add_key="add_hrv")
+
+    if get_result("res_hrv"):
+        if st.button("Nullstill beregning", key="clear_hrv"):
+            clear_result("res_hrv")
+            st.rerun()
 
 # --- SFP ---
 with tabs[2]:
@@ -236,9 +282,15 @@ with tabs[2]:
     if st.button("Beregn", key="btn_sfp"):
         kWh = besparelse_sfp(qv_sfp, SFP_old, SFP_new, drift)
         kr, kg = nok_og_co2(kWh, pris, utslipp_g)
-        st.success(f"Energi spart: **{fmt_int(kWh)} kWh/år**")
-        st.info(f"Kostnadsbesparelse: **{fmt_int(kr)} kr/år**  |  CO₂-reduksjon: **{fmt_int(kg)} kg/år**")
-        show_add_block("SFP (vifter)", kWh, kr, kg, invest_key="inv_sfp", add_key="add_sfp")
+        set_result("res_sfp", "SFP (vifter)", kWh, kr, kg)
+
+    show_result_block("res_sfp")
+    show_add_block_from_state("res_sfp", invest_key="inv_sfp", add_key="add_sfp")
+
+    if get_result("res_sfp"):
+        if st.button("Nullstill beregning", key="clear_sfp"):
+            clear_result("res_sfp")
+            st.rerun()
 
 # --- Varmepumpe ---
 with tabs[3]:
@@ -246,21 +298,24 @@ with tabs[3]:
 
     Q_netto = st.number_input("Årlig netto varmebehov (kWh/år)", min_value=1000, max_value=50_000_000,
                               value=600_000, step=10_000, key="vp_Q")
-
     eta_old = st.slider("Virkningsgrad gammel kjel", 0.5, 1.0, 0.95, 0.01, key="vp_eta")
-
     COP = st.slider("Varmepumpe COP (årsmiddel/SCOP)", 1.5, 8.0, 3.2, 0.1, key="vp_cop")
-
     dekn = st.slider("Dekningsgrad varmepumpe (%)", 0, 100, 85, 1, key="vp_dekn") / 100.0
 
     if st.button("Beregn", key="btn_vp"):
         kWh = besparelse_varmepumpe(Q_netto, eta_old, COP, dekn)
         kr, kg = nok_og_co2(kWh, pris, utslipp_g)
+        set_result("res_vp", "Varmepumpe", kWh, kr, kg, extra={"dekn": dekn, "Q_netto": Q_netto})
 
-        st.success(f"Energi spart: **{fmt_int(kWh)} kWh/år**")
-        st.info(f"Kostnadsbesparelse: **{fmt_int(kr)} kr/år**  |  CO₂-reduksjon: **{fmt_int(kg)} kg/år**")
-        st.caption(f"Varmepumpa dekker ca. {fmt_int(Q_netto * dekn)} kWh/år av varmebehovet.")
-        show_add_block("Varmepumpe", kWh, kr, kg, invest_key="inv_vp", add_key="add_vp")
+    res = get_result("res_vp")
+    if res:
+        show_result_block("res_vp")
+        st.caption(f"Varmepumpa dekker ca. {fmt_int(res['extra']['Q_netto'] * res['extra']['dekn'])} kWh/år av varmebehovet.")
+        show_add_block_from_state("res_vp", invest_key="inv_vp", add_key="add_vp")
+
+        if st.button("Nullstill beregning", key="clear_vp"):
+            clear_result("res_vp")
+            st.rerun()
 
 # --- Temperaturreduksjon ---
 with tabs[4]:
@@ -272,10 +327,15 @@ with tabs[4]:
     if st.button("Beregn", key="btn_temp"):
         kWh = besparelse_tempreduksjon(Q_space, deltaT)
         kr, kg = nok_og_co2(kWh, pris, utslipp_g)
+        set_result("res_temp", "Temperaturreduksjon", kWh, kr, kg)
 
-        st.success(f"Energi spart: **{fmt_int(kWh)} kWh/år**")
-        st.info(f"Kostnadsbesparelse: **{fmt_int(kr)} kr/år**  |  CO₂-reduksjon: **{fmt_int(kg)} kg/år**")
-        show_add_block("Temperaturreduksjon", kWh, kr, kg, invest_key="inv_temp", add_key="add_temp")
+    show_result_block("res_temp")
+    show_add_block_from_state("res_temp", invest_key="inv_temp", add_key="add_temp")
+
+    if get_result("res_temp"):
+        if st.button("Nullstill beregning", key="clear_temp"):
+            clear_result("res_temp")
+            st.rerun()
 
 # --- Nattsenking ---
 with tabs[5]:
@@ -288,10 +348,15 @@ with tabs[5]:
     if st.button("Beregn", key="btn_night"):
         kWh = besparelse_nattsenking(Q_space_n, setback, hours)
         kr, kg = nok_og_co2(kWh, pris, utslipp_g)
+        set_result("res_night", "Nattsenking", kWh, kr, kg)
 
-        st.success(f"Energi spart: **{fmt_int(kWh)} kWh/år**")
-        st.info(f"Kostnadsbesparelse: **{fmt_int(kr)} kr/år**  |  CO₂-reduksjon: **{fmt_int(kg)} kg/år**")
-        show_add_block("Nattsenking", kWh, kr, kg, invest_key="inv_night", add_key="add_night")
+    show_result_block("res_night")
+    show_add_block_from_state("res_night", invest_key="inv_night", add_key="add_night")
+
+    if get_result("res_night"):
+        if st.button("Nullstill beregning", key="clear_night"):
+            clear_result("res_night")
+            st.rerun()
 
 # --- Belysning ---
 with tabs[6]:
@@ -338,10 +403,15 @@ with tabs[6]:
     if st.button("Beregn", key="btn_lights"):
         kWh = besparelse_belysning(ant, st.session_state["lights_W_old"], st.session_state["lights_W_led"], timer)
         kr, kg = nok_og_co2(kWh, pris, utslipp_g)
+        set_result("res_led", "Belysning (LED)", kWh, kr, kg)
 
-        st.success(f"Energi spart: **{fmt_int(kWh)} kWh/år**")
-        st.info(f"Kostnadsbesparelse: **{fmt_int(kr)} kr/år**  |  CO₂-reduksjon: **{fmt_int(kg)} kg/år**")
-        show_add_block("Belysning (LED)", kWh, kr, kg, invest_key="inv_led", add_key="add_led")
+    show_result_block("res_led")
+    show_add_block_from_state("res_led", invest_key="inv_led", add_key="add_led")
+
+    if get_result("res_led"):
+        if st.button("Nullstill beregning", key="clear_led"):
+            clear_result("res_led")
+            st.rerun()
 
 # --- Solceller ---
 with tabs[7]:
@@ -368,19 +438,29 @@ with tabs[7]:
 | 950 | Optimale forhold (sørvendt, god vinkel 25–35°) |
 """)
 
-    kWp = areal_til_kwp(areal, utnyttelse)
+    # kWp per m² moduler (juster her hvis du vil)
+    kwp_per_m2_moduler = 0.20
+
+    kWp = areal_til_kwp(areal, utnyttelse, kwp_per_m2=kwp_per_m2_moduler)
     st.caption(f"Estimert installert effekt: **{kWp:.1f} kWp**")
 
     if st.button("Beregn", key="btn_pv"):
         kWh = kWp * float(spes_prod)
         kr, kg = nok_og_co2(kWh, pris, utslipp_g)
+        set_result("res_pv", "Solceller", kWh, kr, kg, extra={"kWp": kWp, "spes": spes_prod, "areal": areal, "utnytt": utnyttelse})
 
-        st.success(f"Årsproduksjon: **{fmt_int(kWh)} kWh/år**")
-        st.info(f"Verdi: **{fmt_int(kr)} kr/år**  |  CO₂-reduksjon: **{fmt_int(kg)} kg/år**")
-        st.caption(f"Tommelfinger: {kWp/areal:.2f} kWp/m² tilgjengelig tak (utnyttelse {utnyttelse*100:.0f} %, 0.20 kWp/m² moduler)")
+    res = get_result("res_pv")
+    if res:
+        show_result_block("res_pv")
+        st.caption(
+            f"Tommelfinger: {res['extra']['kWp']/res['extra']['areal']:.2f} kWp/m² tilgjengelig tak "
+            f"(utnyttelse {res['extra']['utnytt']*100:.0f} %, {kwp_per_m2_moduler:.2f} kWp/m² moduler)"
+        )
+        show_add_block_from_state("res_pv", invest_key="inv_pv", add_key="add_pv")
 
-        # NB: unike keys for solceller
-        show_add_block("Solceller", kWh, kr, kg, invest_key="inv_pv", add_key="add_pv")
+        if st.button("Nullstill beregning", key="clear_pv"):
+            clear_result("res_pv")
+            st.rerun()
 
 # --- Oversikt ---
 with tabs[8]:
@@ -391,10 +471,8 @@ with tabs[8]:
     else:
         df = pd.DataFrame(st.session_state["tiltak_liste"])
 
-        # Vis tabell
         st.dataframe(df, use_container_width=True)
 
-        # Summer
         sum_kwh = df["Energisparing (kWh/år)"].sum()
         sum_kr = df["Kostnadsbesparelse (kr/år)"].sum()
         sum_co2 = df["CO₂-reduksjon (kg/år)"].sum()
@@ -417,3 +495,4 @@ with tabs[8]:
     if st.button("Tøm oversikt", key="clear_overview"):
         st.session_state["tiltak_liste"] = []
         st.success("Oversikten er tømt.")
+        st.rerun()
