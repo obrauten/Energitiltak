@@ -54,8 +54,19 @@ def besparelse_sfp(qv_m3_h: float, SFP_old: float, SFP_new: float, driftstimer: 
     qv_m3_s = qv_m3_h / 3600.0
     return max(dSFP * qv_m3_s * driftstimer, 0.0)
 
-def besparelse_varmepumpe(Q_netto_kWh_year: float, eta_old: float, COP_new: float) -> float:
-    return max(Q_netto_kWh_year * (1.0/eta_old - 1.0/max(COP_new, 0.0001)), 0.0)
+def besparelse_varmepumpe(Q_netto_kWh_year: float, eta_old: float, COP_new: float, dekningsgrad: float) -> float:
+    """
+    Q_netto_kWh_year: årlig nyttig varmebehov (kWh/år)
+    eta_old: virkningsgrad gammel kjel/varmeløsning (0.5–1.0)
+    COP_new: varmepumpens årsmiddel (SCOP)
+    dekningsgrad: andel av varmebehovet som VP dekker (0–1)
+    """
+    eta_old = max(float(eta_old), 1e-6)
+    COP_new = max(float(COP_new), 1e-6)
+    dekningsgrad = max(min(float(dekningsgrad), 1.0), 0.0)
+
+    Q_vp = float(Q_netto_kWh_year) * dekningsgrad
+    return max(Q_vp * (1.0/eta_old - 1.0/COP_new), 0.0)
 
 def besparelse_tempreduksjon(Q_space_kWh_year: float, delta_T_C: float) -> float:
     return max(Q_space_kWh_year * 0.05 * max(delta_T_C, 0.0), 0.0)
@@ -186,14 +197,36 @@ with tabs[2]:
 # === Varmepumpe ===
 with tabs[3]:
     st.subheader("Varmepumpe")
-    Q_netto = st.number_input("Årlig netto varmebehov (kWh/år)", min_value=1000, max_value=50_000_000, value=600_000, step=10_000, key="vp_Q")
-    eta_old = st.slider("Virkningsgrad gammel kjel", 0.5, 1.0, 0.95, 0.01, key="vp_eta")
-    COP = st.slider("Varmepumpe COP", 1.5, 8.0, 3.2, 0.1, key="vp_cop")
+
+    Q_netto = st.number_input(
+        "Årlig netto varmebehov (kWh/år)",
+        min_value=1000, max_value=50_000_000,
+        value=600_000, step=10_000, key="vp_Q"
+    )
+
+    eta_old = st.slider(
+        "Virkningsgrad gammel kjel",
+        0.5, 1.0, 0.95, 0.01, key="vp_eta"
+    )
+
+    COP = st.slider(
+        "Varmepumpe COP (årsmiddel/SCOP)",
+        1.5, 8.0, 3.2, 0.1, key="vp_cop"
+    )
+
+    dekn = st.slider(
+        "Dekningsgrad varmepumpe (%)",
+        0, 100, 85, 1, key="vp_dekn"
+    ) / 100.0
+
     if st.button("Beregn", key="btn_vp"):
-        kWh = besparelse_varmepumpe(Q_netto, eta_old, COP)
+        kWh = besparelse_varmepumpe(Q_netto, eta_old, COP, dekn)
         kr, kg = nok_og_co2(kWh, pris, utslipp_g)
         st.success(f"Energi spart: **{fmt_int(kWh)} kWh/år**")
         st.info(f"Kostnadsbesparelse: **{fmt_int(kr)} kr/år**  |  CO₂-reduksjon: **{fmt_int(kg)} kg/år**")
+        st.caption(f"Varmepumpa dekker ca. {fmt_int(Q_netto * dekn)} kWh/år av varmebehovet.")
+
+
 
 # === Temperaturreduksjon ===
 with tabs[4]:
