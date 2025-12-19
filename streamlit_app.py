@@ -34,6 +34,13 @@ def annual_hours_from_schedule(t_start: time, t_end: time, days_per_week: int, w
     h_day = daily_hours(t_start, t_end)
     return max(min(h_day * days_per_week * weeks_per_year, 8760.0), 0.0)
 
+def areal_til_kwp(
+    areal_m2: float,
+    utnyttelse: float = 0.80,
+    kwp_per_m2: float = 0.18
+) -> float:
+    return max(areal_m2 * utnyttelse * kwp_per_m2, 0.0)
+
 # ===============================
 # Tiltaksberegninger
 # ===============================
@@ -312,3 +319,41 @@ with tabs[6]:
         kr, kg = nok_og_co2(kWh, pris, utslipp_g)
         st.success(f"Energi spart: **{fmt_int(kWh)} kWh/år**")
         st.info(f"Kostnadsbesparelse: **{fmt_int(kr)} kr/år**  |  CO₂-reduksjon: **{fmt_int(kg)} kg/år**")
+
+# === Solceller ===
+with tabs[X]:
+    st.subheader("Solceller")
+
+    areal = st.number_input(
+        "Tilgjengelig takareal (m²)",
+        min_value=10.0, max_value=200_000.0,
+        value=1000.0, step=50.0
+    )
+
+    utnyttelse = st.slider(
+        "Utnyttelsesgrad tak (%)",
+        50, 100, 80, 5
+    ) / 100.0
+
+    spes_prod = st.selectbox(
+        "Forventet årsproduksjon (kWh/kWp)",
+        [800, 900, 950],
+        index=1
+    )
+
+    kWp = areal_til_kwp(areal, utnyttelse)
+
+    st.caption(f"Estimert installert effekt: **{kWp:.1f} kWp**")
+
+    if st.button("Beregn", key="btn_pv"):
+        kWh = kWp * spes_prod
+        kr, kg = nok_og_co2(kWh, pris, utslipp_g)
+
+        st.success(f"Årsproduksjon: **{fmt_int(kWh)} kWh/år**")
+        st.info(f"Verdi: **{fmt_int(kr)} kr/år**  |  CO₂-reduksjon: **{fmt_int(kg)} kg/år**")
+
+        st.caption(
+            f"Tommelfinger: {kWp/areal:.2f} kWp/m² "
+            f"(utnyttelse {utnyttelse*100:.0f} %, {0.18} kWp/m² moduler)"
+        )
+
