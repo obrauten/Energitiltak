@@ -425,8 +425,7 @@ with tabs[7]:
     show_result_and_add("pv", "Solceller", pris, utslipp_g, "inv_pv", "add_pv")
 
 # ===============================
-# Tab 8: Oversikt
-# ===============================
+# === Oversikt ===
 with tabs[8]:
     st.subheader("Oversikt tiltak (pakken)")
 
@@ -445,12 +444,31 @@ with tabs[8]:
                 "Kostnadsbesparelse (kr/år)": kr_aar,
                 "CO₂-reduksjon (kg/år)": co2_kg,
                 "Investering (kr)": inv,
-                "Tilbakebetaling (år)": None if pb is None else round(pb, 2)
+                "Tilbakebetaling (år)": (None if pb is None else pb)
             })
 
         df = pd.DataFrame(rows)
-        st.dataframe(df, use_container_width=True)
 
+        # --- Formatering: heltall + tusenskille (mellomrom) ---
+        def int_space(x):
+            return f"{int(round(x)):,}".replace(",", " ")
+
+        def years_1(x):
+            if pd.isna(x):
+                return "–"
+            return f"{x:.1f}".replace(".", ",")
+
+        styler = df.style.format({
+            "Energisparing (kWh/år)": int_space,
+            "Kostnadsbesparelse (kr/år)": int_space,
+            "CO₂-reduksjon (kg/år)": int_space,
+            "Investering (kr)": int_space,
+            "Tilbakebetaling (år)": years_1
+        })
+
+        st.dataframe(styler, use_container_width=True)
+
+        # Summer (samme som før)
         sum_kwh = df["Energisparing (kWh/år)"].sum()
         sum_kr = df["Kostnadsbesparelse (kr/år)"].sum()
         sum_co2 = df["CO₂-reduksjon (kg/år)"].sum()
@@ -458,13 +476,15 @@ with tabs[8]:
 
         st.divider()
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Sum energisparing", f"{fmt_int(sum_kwh)} kWh/år")
-        c2.metric("Sum besparelse", f"{fmt_int(sum_kr)} kr/år")
-        c3.metric("Sum CO₂-reduksjon", f"{fmt_int(sum_co2)} kg/år")
-        c4.metric("Sum investering", f"{fmt_int(sum_inv)} kr")
+        c1.metric("Sum energisparing", f"{int(round(sum_kwh)):,}".replace(",", " ") + " kWh/år")
+        c2.metric("Sum besparelse", f"{int(round(sum_kr)):,}".replace(",", " ") + " kr/år")
+        c3.metric("Sum CO₂-reduksjon", f"{int(round(sum_co2)):,}".replace(",", " ") + " kg/år")
+        c4.metric("Sum investering", f"{int(round(sum_inv)):,}".replace(",", " ") + " kr")
 
-        st.caption(f"**Samlet tilbakebetaling (enkel):** " + ("–" if sum_kr <= 0 else f"**{sum_inv / sum_kr:.1f} år**"))
-        st.caption("Merk: Summert besparelse er forenklet. Tiltak kan påvirke hverandre (dobbelttelling).")
+        st.caption(
+            "**Samlet tilbakebetaling (enkel):** "
+            + ("–" if sum_kr <= 0 else f"**{(sum_inv / sum_kr):.1f} år**".replace(".", ","))
+        )
 
     if st.button("Tøm oversikt", key="clear_overview"):
         st.session_state["tiltak_liste"] = []
