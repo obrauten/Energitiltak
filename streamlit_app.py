@@ -96,16 +96,16 @@ with st.sidebar:
     pris = st.number_input("Strøm-/energipris (kr/kWh)", min_value=0.0, max_value=20.0, value=1.25, step=0.05, key="econ_price")
     utslipp_g = st.number_input("Utslippsfaktor (g CO₂/kWh)", min_value=0.0, max_value=2000.0, value=20.0, step=1.0, key="econ_emis")
 
-st.header("Driftstid")
+    st.header("Driftstid")
 
-mode = st.radio("Velg input", ["Tidsrom og dager", "Driftstimer/år (manuelt)"], index=0, key="op_mode")
+        mode = st.radio("Velg input", ["Tidsrom og dager", "Driftstimer/år (manuelt)"], index=0, key="op_mode")
 
-if mode == "Tidsrom og dager":
-    t_start = st.time_input("Fra", value=time(7, 0), key="op_start")
-    t_end   = st.time_input("Til", value=time(17, 0), key="op_end")
+    if mode == "Tidsrom og dager":
+        t_start = st.time_input("Fra", value=time(7, 0), key="op_start")
+        t_end   = st.time_input("Til", value=time(17, 0), key="op_end")
 
-    dagvalg = st.selectbox("Dager", ["Alle dager", "Man–fre", "Egendefinert"], index=1, key="op_days")
-    if dagvalg == "Alle dager":
+        dagvalg = st.selectbox("Dager", ["Alle dager", "Man–fre", "Egendefinert"], index=1, key="op_days")
+     if dagvalg == "Alle dager":
         days_per_week = 7
     elif dagvalg == "Man–fre":
         days_per_week = 5
@@ -117,8 +117,8 @@ if mode == "Tidsrom og dager":
 
     st.caption(f"Beregnet driftstimer/år: **{int(round(driftstimer))} h**")
 
-else:
-    driftstimer = st.number_input("Driftstimer/år", min_value=0, max_value=8760, value=3000, step=100, key="op_manual")
+    else:
+        driftstimer = st.number_input("Driftstimer/år", min_value=0, max_value=8760, value=3000, step=100, key="op_manual")
 
 
 # === Etterisolering ===
