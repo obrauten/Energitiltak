@@ -1,5 +1,7 @@
 import streamlit as st
 
+import pandas as pd
+
 st.set_page_config(
     page_title="Energisparekalkulator",
     layout="wide"
@@ -23,7 +25,42 @@ def nok_og_co2(kWh: float, pris_kr_per_kWh: float, utslipp_g_per_kWh: float):
     kr_aar = kWh * pris_kr_per_kWh
     kg_co2_aar = kWh * (utslipp_g_per_kWh / 1000.0)  # g → kg
     return kr_aar, kg_co2_aar
-    
+
+def payback_years(invest_kr: float, saving_kr_per_year: float) -> float | None:
+    if saving_kr_per_year <= 0:
+        return None
+    return invest_kr / saving_kr_per_year
+
+def init_overview_state():
+    if "tiltak_liste" not in st.session_state:
+        st.session_state["tiltak_liste"] = []
+
+def add_to_overview(navn: str, kwh: float, kr: float, co2_kg: float, invest: float):
+    st.session_state["tiltak_liste"].append({
+        "Tiltak": navn,
+        "Energisparing (kWh/år)": float(kwh),
+        "Kostnadsbesparelse (kr/år)": float(kr),
+        "CO₂-reduksjon (kg/år)": float(co2_kg),
+        "Investering (kr)": float(invest),
+        "Tilbakebetaling (år)": payback_years(float(invest), float(kr))
+    })
+
+def show_add_block(navn: str, kwh: float, kr: float, co2_kg: float, invest_key: str, add_key: str):
+    st.divider()
+    st.subheader("Lønnsomhet")
+    invest = st.number_input("Investeringskostnad (kr)", min_value=0.0, value=0.0, step=10_000.0, key=invest_key)
+    pb = payback_years(invest, kr)
+
+    if pb is None:
+        st.caption("Tilbakebetaling: – (mangler besparelse)")
+    else:
+        st.caption(f"Tilbakebetaling (enkel): **{pb:.1f} år**")
+
+    if st.button("Legg til i oversikt", key=add_key):
+        add_to_overview(navn, kwh, kr, co2_kg, invest)
+        st.success("Lagt til i oversikt.")
+
+
 from datetime import time
 
 def daily_hours(t_start: time, t_end: time) -> float:
@@ -108,10 +145,13 @@ def besparelse_belysning(ant_armatur: int, W_gammel: float, W_led: float, timer_
 # ===============================
 st.title("Energisparekalkulator")
 
+init_overview_state()
+
 tabs = st.tabs([
     "Etterisolering", "Varmegjenvinner", "SFP (vifter)", "Varmepumpe",
-    "Temperaturreduksjon", "Nattsenking", "Belysning (LED)", "Solceller"
+    "Temperaturreduksjon", "Nattsenking", "Belysning (LED)", "Solceller", "Oversikt"
 ])
+
 
 # Felles økonomi/CO₂ i sidemenyen
 with st.sidebar:
@@ -176,6 +216,13 @@ with tabs[0]:
         kr, kg = nok_og_co2(kWh, pris, utslipp_g)
         st.success(f"Energi spart: **{fmt_int(kWh)} kWh/år**")
         st.info(f"Kostnadsbesparelse: **{fmt_int(kr)} kr/år**  |  CO₂-reduksjon: **{fmt_int(kg)} kg/år**")
+            show_add_block(
+        navn="Etterisolering",
+        kwh=kWh, kr=kr, co2_kg=kg,
+        invest_key="inv_iso",
+        add_key="add_iso"
+    )
+
 
 # === Varmegjenvinner ===
 with tabs[1]:
@@ -189,6 +236,13 @@ with tabs[1]:
         kr, kg = nok_og_co2(kWh, pris, utslipp_g)
         st.success(f"Energi spart: **{fmt_int(kWh)} kWh/år**")
         st.info(f"Kostnadsbesparelse: **{fmt_int(kr)} kr/år**  |  CO₂-reduksjon: **{fmt_int(kg)} kg/år**")
+            show_add_block(
+        navn="Etterisolering",
+        kwh=kWh, kr=kr, co2_kg=kg,
+        invest_key="inv_iso",
+        add_key="add_iso"
+    )
+
 
 # === SFP (vifter) ===
 with tabs[2]:
@@ -202,6 +256,13 @@ with tabs[2]:
         kr, kg = nok_og_co2(kWh, pris, utslipp_g)
         st.success(f"Energi spart: **{fmt_int(kWh)} kWh/år**")
         st.info(f"Kostnadsbesparelse: **{fmt_int(kr)} kr/år**  |  CO₂-reduksjon: **{fmt_int(kg)} kg/år**")
+            show_add_block(
+        navn="Etterisolering",
+        kwh=kWh, kr=kr, co2_kg=kg,
+        invest_key="inv_iso",
+        add_key="add_iso"
+    )
+
 
 # === Varmepumpe ===
 with tabs[3]:
@@ -234,6 +295,13 @@ with tabs[3]:
         st.success(f"Energi spart: **{fmt_int(kWh)} kWh/år**")
         st.info(f"Kostnadsbesparelse: **{fmt_int(kr)} kr/år**  |  CO₂-reduksjon: **{fmt_int(kg)} kg/år**")
         st.caption(f"Varmepumpa dekker ca. {fmt_int(Q_netto * dekn)} kWh/år av varmebehovet.")
+            show_add_block(
+        navn="Etterisolering",
+        kwh=kWh, kr=kr, co2_kg=kg,
+        invest_key="inv_iso",
+        add_key="add_iso"
+    )
+
 
 
 
@@ -247,6 +315,13 @@ with tabs[4]:
         kr, kg = nok_og_co2(kWh, pris, utslipp_g)
         st.success(f"Energi spart: **{fmt_int(kWh)} kWh/år**")
         st.info(f"Kostnadsbesparelse: **{fmt_int(kr)} kr/år**  |  CO₂-reduksjon: **{fmt_int(kg)} kg/år**")
+            show_add_block(
+        navn="Etterisolering",
+        kwh=kWh, kr=kr, co2_kg=kg,
+        invest_key="inv_iso",
+        add_key="add_iso"
+    )
+
 
 # === Nattsenking ===
 with tabs[5]:
@@ -259,6 +334,13 @@ with tabs[5]:
         kr, kg = nok_og_co2(kWh, pris, utslipp_g)
         st.success(f"Energi spart: **{fmt_int(kWh)} kWh/år**")
         st.info(f"Kostnadsbesparelse: **{fmt_int(kr)} kr/år**  |  CO₂-reduksjon: **{fmt_int(kg)} kg/år**")
+            show_add_block(
+        navn="Etterisolering",
+        kwh=kWh, kr=kr, co2_kg=kg,
+        invest_key="inv_iso",
+        add_key="add_iso"
+    )
+
 
 # === Belysning (LED) ===
 with tabs[6]:
@@ -321,6 +403,13 @@ with tabs[6]:
         kr, kg = nok_og_co2(kWh, pris, utslipp_g)
         st.success(f"Energi spart: **{fmt_int(kWh)} kWh/år**")
         st.info(f"Kostnadsbesparelse: **{fmt_int(kr)} kr/år**  |  CO₂-reduksjon: **{fmt_int(kg)} kg/år**")
+            show_add_block(
+        navn="Etterisolering",
+        kwh=kWh, kr=kr, co2_kg=kg,
+        invest_key="inv_iso",
+        add_key="add_iso"
+    )
+
 
 # === Solceller ===
 with tabs[7]:
@@ -370,4 +459,46 @@ with tabs[7]:
             f"Tommelfinger: {kWp/areal:.2f} kWp/m² "
             f"(utnyttelse {utnyttelse*100:.0f} %, {0.20} kWp/m² moduler)"
         )
+            show_add_block(
+        navn="Etterisolering",
+        kwh=kWh, kr=kr, co2_kg=kg,
+        invest_key="inv_iso",
+        add_key="add_iso"
+    )
 
+# === Oversikt ===
+with tabs[8]:
+    st.subheader("Oversikt tiltak")
+
+    if len(st.session_state["tiltak_liste"]) == 0:
+        st.info("Ingen tiltak lagt til enda. Gå til et tiltak, beregn, og trykk 'Legg til i oversikt'.")
+    else:
+        df = pd.DataFrame(st.session_state["tiltak_liste"])
+
+        # Vis tabell
+        st.dataframe(df, use_container_width=True)
+
+        # Summer
+        sum_kwh = df["Energisparing (kWh/år)"].sum()
+        sum_kr = df["Kostnadsbesparelse (kr/år)"].sum()
+        sum_co2 = df["CO₂-reduksjon (kg/år)"].sum()
+        sum_inv = df["Investering (kr)"].sum()
+
+        st.divider()
+        st.subheader("Sum")
+        st.write(f"**Sum energisparing:** {fmt_int(sum_kwh)} kWh/år")
+        st.write(f"**Sum kostnadsbesparelse:** {fmt_int(sum_kr)} kr/år")
+        st.write(f"**Sum CO₂-reduksjon:** {fmt_int(sum_co2)} kg/år")
+        st.write(f"**Sum investering:** {fmt_int(sum_inv)} kr")
+
+        # Kombinert payback (enkel)
+        if sum_kr > 0:
+            st.write(f"**Samlet tilbakebetaling (enkel):** {sum_inv / sum_kr:.1f} år")
+        else:
+            st.write("**Samlet tilbakebetaling (enkel):** –")
+
+        st.caption("Merk: Summert besparelse er en forenkling. Tiltak kan påvirke hverandre (dobbelttelling).")
+
+    if st.button("Tøm oversikt", key="clear_overview"):
+        st.session_state["tiltak_liste"] = []
+        st.success("Oversikten er tømt.")
