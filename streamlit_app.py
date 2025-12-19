@@ -339,7 +339,7 @@ with tabs[7]:
 
     spes_prod = st.selectbox(
         "Forventet årsproduksjon (kWh/kWp)",
-        [800, 900, 950],
+        [700, 750, 800, 850, 900, 950],
         index=1
     )
 
